@@ -1,0 +1,96 @@
+name: Update DNS Records in Cloudflare
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "*/5 * * * *"
+  # push:
+  #   branches: [ main ]
+
+jobs:
+  update-dns-records:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt update
+          sudo apt install -y curl wget
+
+      - name: rm tmp file
+        run: |
+          rm -rf tmpiplist
+
+      # Runs a single command using the runners shell
+      - name: get cloudflare proxy ip from zip.baipiao.eu.org
+        run: |
+          curl https://zip.baipiao.eu.org --output ip.zip
+          unzip ip.zip
+          ls | grep '\-443' | xargs -i cat {} >> zipip.txt
+          cat zipip.txt | head -n 500 >> tmpiplist
+
+      - name: ip cloudflare test
+        run: |
+          cat tmpiplist | grep -v '^$' | sort | uniq > ip_uniq.txt
+          bash cfiptest.sh ip_uniq.txt successful_ips
+          cat successful_ips | grep -v '^$' | sort | uniq > tmp_succ_ip
+          cat tmp_succ_ip | head -n 200 > ./public/ip443.html
+
+      - name: checkout kr ip to dns
+        run: |
+          bash checkout_ip.sh tmp_succ_ip check_ip KR
+          cat check_ip  | grep -v '^$' | sort | uniq | head -n 5 > dns.txt
+
+      - name: cat dns.txt
+        run: |
+          echo ">>>dns.txt>>>"
+          cat dns.txt
+          cat dns.txt | grep -v '^$' || exit 1
+
+      - name: Update DNS records
+        env:
+          CF_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CF_ZONE_ID: ${{ secrets.CLOUDFLARE_ZONE_ID }}
+          CF_RECORD_NAME: ${{ secrets.CLOUDFLARE_RECORD_NAME }}
+        run: |
+          # 读取当前的 DNS 记录
+          current_records=$(curl -s -X GET "https://api.cloudflare.com/client/v4/zones/${CF_ZONE_ID}/dns_records?type=A&name=${CF_RECORD_NAME}" \
+            -H "Authorization: Bearer ${CF_API_TOKEN}" \
+            -H "Content-Type: application/json")
+
+          # 读取 dns.txt 文件中的 IP 地址
+          declare -A new_ips
+          while IFS= read -r ip; do
+            new_ips[$ip]=1
+          done < dns.txt
+
+          # 遍历当前记录，删除不在 dns.txt 中的记录
+          echo "$current_records" | jq -c '.result[]' | while read -r record; do
+            ip=$(echo "$record" | jq -r '.content')
+            id=$(echo "$record" | jq -r '.id')
+            if [[ -z "${new_ips[$ip]}" ]]; then
+              echo "Deleting record for IP $ip"
+              curl -s -X DELETE "https://api.cloudflare.com/client/v4/zones/${CF_ZONE_ID}/dns_records/$id" \
+                -H "Authorization: Bearer ${CF_API_TOKEN}" \
+                -H "Content-Type: application/json"
+            else
+              unset new_ips[$ip]
+            fi
+          done
+
+          # 添加新的记录
+          for ip in "${!new_ips[@]}"; do
+            echo "Adding record for IP $ip"
+            curl -s -X POST "https://api.cloudflare.com/client/v4/zones/${CF_ZONE_ID}/dns_records" \
+              -H "Authorization: Bearer ${CF_API_TOKEN}" \
+              -H "Content-Type: application/json" \
+              --data "{\"type\":\"A\",\"name\":\"${CF_RECORD_NAME}\",\"content\":\"$ip\",\"ttl\":1,\"proxied\":false}"
+          done
+
+      - name: Add & Commit
+        uses: EndBug/add-and-commit@v9.1.4
+        with:
+          # Arguments for the git add command
+          add: '["./public/*.html", "dns.txt"]'
