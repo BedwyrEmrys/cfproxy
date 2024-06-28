@@ -3,7 +3,7 @@ name: Update DNS Records in Cloudflare
 on:
   workflow_dispatch:
   schedule:
-    - cron: "*/5 * * * *"
+    - cron: "*/10 * * * *"
   # push:
   #   branches: [ main ]
 
