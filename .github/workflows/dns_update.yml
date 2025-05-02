@@ -29,7 +29,7 @@ jobs:
           curl https://zip.baipiao.eu.org --output ip.zip
           unzip ip.zip
           ls | grep '\-443' | xargs -i cat {} >> zipip.txt
-          cat zipip.txt | head -n 500 >> tmpiplist
+          cat zipip.txt | head -n 800 >> tmpiplist
 
       - name: ip cloudflare test
         run: |
