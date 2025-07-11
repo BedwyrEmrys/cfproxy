@@ -24,12 +24,9 @@ jobs:
           rm -rf tmpiplist
 
       # Runs a single command using the runners shell
-      - name: get cloudflare proxy ip from zip.baipiao.eu.org
+      - name: get cloudflare proxy ip from  https://ipdb.api.030101.xyz/?type=proxy
         run: |
-          curl https://zip.baipiao.eu.org --output ip.zip
-          unzip ip.zip
-          ls | grep '\-443' | xargs -i cat {} >> zipip.txt
-          cat zipip.txt | head -n 800 >> tmpiplist
+          curl -L -o tmpiplist https://ipdb.api.030101.xyz/?type=proxy
 
       - name: ip cloudflare test
         run: |
