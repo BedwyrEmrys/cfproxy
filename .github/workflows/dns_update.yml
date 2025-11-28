@@ -26,7 +26,6 @@ jobs:
       # Runs a single command using the runners shell
       - name: get cloudflare proxy ip from  https://ipdb.api.030101.xyz/?type=proxy
         run: |
-          cat proxyips.txt | grep -v '^$' | sort | uniq > tmpiplist
           curl -L -o tmpiplist https://ipdb.api.030101.xyz/?type=proxy
 
       - name: ip cloudflare test
